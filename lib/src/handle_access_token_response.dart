@@ -49,65 +49,72 @@ Credentials handleAccessTokenResponse(http.Response response, Uri tokenEndpoint,
     var parameters =
         getParameters(MediaType.parse(contentTypeString), response.body);
 
-    for (var requiredParameter in ['access_token', 'token_type']) {
-      if (!parameters.containsKey(requiredParameter)) {
-        throw FormatException(
-            'did not contain required parameter "$requiredParameter"');
-      } else if (parameters[requiredParameter] is! String) {
-        throw FormatException(
-            'required parameter "$requiredParameter" was not a string, was '
-            '"${parameters[requiredParameter]}"');
-      }
-    }
+    return handleAccessTokenResponseParameters(parameters);
 
-    // TODO(nweiz): support the "mac" token type
-    // (http://tools.ietf.org/html/draft-ietf-oauth-v2-http-mac-01)
-    if (parameters['token_type'].toLowerCase() != 'bearer') {
-      throw FormatException(
-          '"$tokenEndpoint": unknown token type "${parameters['token_type']}"');
-    }
-
-    var expiresIn = parameters['expires_in'];
-    if (expiresIn != null) {
-      if (expiresIn is String) {
-        try {
-          expiresIn = double.parse(expiresIn).toInt();
-        } on FormatException {
-          throw FormatException(
-              'parameter "expires_in" could not be parsed as in, was: "$expiresIn"');
-        }
-      } else if (expiresIn is! int) {
-        throw FormatException(
-            'parameter "expires_in" was not an int, was: "$expiresIn"');
-      }
-    }
-
-    for (var name in ['refresh_token', 'id_token', 'scope']) {
-      var value = parameters[name];
-      if (value != null && value is! String) {
-        throw FormatException(
-            'parameter "$name" was not a string, was "$value"');
-      }
-    }
-
-    var scope = parameters['scope'] as String?;
-    if (scope != null) scopes = scope.split(delimiter);
-
-    var expiration = expiresIn == null
-        ? null
-        : startTime.add(Duration(seconds: expiresIn) - _expirationGrace);
-
-    return Credentials(parameters['access_token'],
-        refreshToken: parameters['refresh_token'],
-        idToken: parameters['id_token'],
-        tokenEndpoint: tokenEndpoint,
-        scopes: scopes,
-        expiration: expiration);
   } on FormatException catch (e) {
     throw FormatException('Invalid OAuth response for "$tokenEndpoint": '
         '${e.message}.\n\n${response.body}');
   }
 }
+
+
+Credentials handleAccessTokenResponseParameters(var Parameters) {
+  for (var requiredParameter in ['access_token', 'token_type']) {
+    if (!parameters.containsKey(requiredParameter)) {
+      throw FormatException(
+          'did not contain required parameter "$requiredParameter"');
+    } else if (parameters[requiredParameter] is! String) {
+      throw FormatException(
+          'required parameter "$requiredParameter" was not a string, was '
+              '"${parameters[requiredParameter]}"');
+    }
+  }
+
+  // TODO(nweiz): support the "mac" token type
+  // (http://tools.ietf.org/html/draft-ietf-oauth-v2-http-mac-01)
+  if (parameters['token_type'].toLowerCase() != 'bearer') {
+    throw FormatException(
+        '"$tokenEndpoint": unknown token type "${parameters['token_type']}"');
+  }
+
+  var expiresIn = parameters['expires_in'];
+  if (expiresIn != null) {
+    if (expiresIn is String) {
+      try {
+        expiresIn = double.parse(expiresIn).toInt();
+      } on FormatException {
+        throw FormatException(
+            'parameter "expires_in" could not be parsed as in, was: "$expiresIn"');
+      }
+    } else if (expiresIn is! int) {
+      throw FormatException(
+          'parameter "expires_in" was not an int, was: "$expiresIn"');
+    }
+  }
+
+  for (var name in ['refresh_token', 'id_token', 'scope']) {
+    var value = parameters[name];
+    if (value != null && value is! String) {
+      throw FormatException(
+          'parameter "$name" was not a string, was "$value"');
+    }
+  }
+
+  var scope = parameters['scope'] as String?;
+  if (scope != null) scopes = scope.split(delimiter);
+
+  var expiration = expiresIn == null
+      ? null
+      : startTime.add(Duration(seconds: expiresIn) - _expirationGrace);
+
+  return Credentials(parameters['access_token'],
+      refreshToken: parameters['refresh_token'],
+      idToken: parameters['id_token'],
+      tokenEndpoint: tokenEndpoint,
+      scopes: scopes,
+      expiration: expiration);
+}
+
 
 /// Throws the appropriate exception for an error response from the
 /// authorization server.

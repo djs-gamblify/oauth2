@@ -110,6 +110,9 @@ class AuthorizationCodeGrant {
   /// The PKCE code verifier. Will be generated if one is not provided in the constructor.
   final String _codeVerifier;
 
+  /// The response type that should be used [code, token]
+  final List<String> _responseType;
+
   /// Creates a new grant.
   ///
   /// If [basicAuth] is `true` (the default), the client credentials are sent to
@@ -147,20 +150,24 @@ class AuthorizationCodeGrant {
   /// [standard JSON response]: https://tools.ietf.org/html/rfc6749#section-5.1
   AuthorizationCodeGrant(
       this.identifier, this.authorizationEndpoint, this.tokenEndpoint,
-      {this.secret,
-      String? delimiter,
-      bool basicAuth = true,
-      http.Client? httpClient,
-      CredentialsRefreshedCallback? onCredentialsRefreshed,
+      {
+        this.secret,
+        String? delimiter,
+        bool basicAuth = true,
+        http.Client? httpClient,
+        CredentialsRefreshedCallback? onCredentialsRefreshed,
       Map<String, dynamic> Function(MediaType? contentType, String body)?
           getParameters,
-      String? codeVerifier})
+        String? codeVerifier,
+        List<String>? responseType
+      })
       : _basicAuth = basicAuth,
         _httpClient = httpClient ?? http.Client(),
         _delimiter = delimiter ?? ' ',
         _getParameters = getParameters ?? parseJsonParameters,
         _onCredentialsRefreshed = onCredentialsRefreshed,
-        _codeVerifier = codeVerifier ?? _createCodeVerifier();
+        _codeVerifier = codeVerifier ?? _createCodeVerifier(),
+        _responseType = responseType ?? ['code'];
 
   /// Returns the URL to which the resource owner should be redirected to
   /// authorize this client.
@@ -189,6 +196,7 @@ class AuthorizationCodeGrant {
     _state = _State.awaitingResponse;
 
     var scopeList = scopes?.toList() ?? <String>[];
+
     var codeChallenge = base64Url
         .encode(sha256.convert(ascii.encode(_codeVerifier)).bytes)
         .replaceAll('=', '');
@@ -197,12 +205,17 @@ class AuthorizationCodeGrant {
     _scopes = scopeList;
     _stateString = state;
     var parameters = {
-      'response_type': 'code',
+      'response_type':  _responseType.join(' '),
       'client_id': identifier,
       'redirect_uri': redirect.toString(),
-      'code_challenge': codeChallenge,
-      'code_challenge_method': 'S256'
     };
+
+    if (_responseType.contains('code')) {
+      parameters['code_challenge'] = codeChallenge;
+      parameters['code_challenge_method'] = 'S256';
+    }
+
+    if (_responseType.contains('id_token')) parameters['nonce'] = _createNonce();
 
     if (state != null) parameters['state'] = state;
     if (scopeList.isNotEmpty) parameters['scope'] = scopeList.join(_delimiter);
@@ -221,10 +234,10 @@ class AuthorizationCodeGrant {
   /// [getAuthorizationUrl] is called, or to call it after
   /// [handleAuthorizationCode] is called.
   ///
-  /// Throws [FormatException] if [parameters] is invalid according to the OAuth2
+  /// Throws [FormatError] if [parameters] is invalid according to the OAuth2
   /// spec or if the authorization server otherwise provides invalid responses.
   /// If `state` was passed to [getAuthorizationUrl], this will throw a
-  /// [FormatException] if the `state` parameter doesn't match the original value.
+  /// [FormatError] if the `state` parameter doesn't match the original value.
   ///
   /// Throws [AuthorizationException] if the authorization fails.
   Future<Client> handleAuthorizationResponse(
@@ -253,13 +266,34 @@ class AuthorizationCodeGrant {
       var uriString = parameters['error_uri'];
       var uri = uriString == null ? null : Uri.parse(uriString);
       throw AuthorizationException(parameters['error']!, description, uri);
-    } else if (!parameters.containsKey('code')) {
+    } else if (parameters.containsKey('code') && parameters.containsKey('id_token') && parameters.containsKey('access_token')) {
       throw FormatException('Invalid OAuth response for '
-          '"$authorizationEndpoint": did not contain required parameter '
-          '"code".');
+          '"$authorizationEndpoint": contain two parameters for both code and token parameter.');
+    } else if (parameters.containsKey('code')) {
+      return await _handleAuthorizationCode(parameters['code']);
+    } else if (parameters.containsKey('id_token') && parameters.containsKey('access_token')) {
+      var startTime = DateTime.now();
+
+      var credentials = handleAccessTokenResponseParams(
+        parameters,
+        tokenEndpoint,
+        startTime,
+        _scopes,
+        _delimiter
+      );
+
+      return Client(credentials,
+          identifier: identifier,
+          secret: secret,
+          basicAuth: _basicAuth,
+          httpClient: _httpClient,
+          onCredentialsRefreshed: _onCredentialsRefreshed);
+
+    } else {
+      throw FormatException('Invalid OAuth response for '
+          '"$authorizationEndpoint": ');
     }
 
-    return await _handleAuthorizationCode(parameters['code']);
   }
 
   /// Processes an authorization code directly.
@@ -273,7 +307,7 @@ class AuthorizationCodeGrant {
   /// [getAuthorizationUrl] is called, or to call it after
   /// [handleAuthorizationCode] is called.
   ///
-  /// Throws [FormatException] if the authorization server provides invalid
+  /// Throws [FormatError] if the authorization server provides invalid
   /// responses while retrieving credentials.
   ///
   /// Throws [AuthorizationException] if the authorization fails.
@@ -332,6 +366,11 @@ class AuthorizationCodeGrant {
         128, (i) => _charset[Random.secure().nextInt(_charset.length)]).join();
   }
 
+  static String _createNonce() {
+    return List.generate(
+        16, (i) => _charset[Random.secure().nextInt(_charset.length)]).join();
+  }
+
   /// Closes the grant and frees its resources.
   ///
   /// This will close the underlying HTTP client, which is shared by the
@@ -366,3 +405,4 @@ class _State {
   @override
   String toString() => _name;
 }
+
