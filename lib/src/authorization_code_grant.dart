@@ -156,8 +156,8 @@ class AuthorizationCodeGrant {
         bool basicAuth = true,
         http.Client? httpClient,
         CredentialsRefreshedCallback? onCredentialsRefreshed,
-      Map<String, dynamic> Function(MediaType? contentType, String body)?
-          getParameters,
+        Map<String, dynamic> Function(MediaType? contentType, String body)?
+        getParameters,
         String? codeVerifier,
         List<String>? responseType
       })
@@ -272,14 +272,14 @@ class AuthorizationCodeGrant {
     } else if (parameters.containsKey('code')) {
       return await _handleAuthorizationCode(parameters['code']);
     } else if (parameters.containsKey('id_token') && parameters.containsKey('access_token')) {
-      var startTime = DateTime.now();
+      final DateTime startTime = DateTime.now();
 
-      var credentials = handleAccessTokenResponseParams(
-        parameters,
-        tokenEndpoint,
-        startTime,
-        _scopes,
-        _delimiter
+      var credentials = handleAccessTokenResponseParameters(
+          parameters,
+          tokenEndpoint,
+          startTime,
+          _scopes,
+          _delimiter
       );
 
       return Client(credentials,
@@ -347,7 +347,7 @@ class AuthorizationCodeGrant {
     }
 
     var response =
-        await _httpClient!.post(tokenEndpoint, headers: headers, body: body);
+    await _httpClient!.post(tokenEndpoint, headers: headers, body: body);
 
     var credentials = handleAccessTokenResponse(
         response, tokenEndpoint, startTime, _scopes, _delimiter,
@@ -405,4 +405,3 @@ class _State {
   @override
   String toString() => _name;
 }
-

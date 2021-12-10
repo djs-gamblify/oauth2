@@ -33,7 +33,7 @@ const _expirationGrace = Duration(seconds: 10);
 Credentials handleAccessTokenResponse(http.Response response, Uri tokenEndpoint,
     DateTime startTime, List<String>? scopes, String delimiter,
     {Map<String, dynamic> Function(MediaType? contentType, String body)?
-        getParameters}) {
+    getParameters}) {
   getParameters ??= parseJsonParameters;
 
   try {
@@ -47,9 +47,13 @@ Credentials handleAccessTokenResponse(http.Response response, Uri tokenEndpoint,
     }
 
     var parameters =
-        getParameters(MediaType.parse(contentTypeString), response.body);
+    getParameters(MediaType.parse(contentTypeString), response.body);
 
-    return handleAccessTokenResponseParameters(parameters);
+    return handleAccessTokenResponseParameters(parameters,
+        tokenEndpoint,
+        startTime,
+        scopes,
+        delimiter);
 
   } on FormatException catch (e) {
     throw FormatException('Invalid OAuth response for "$tokenEndpoint": '
@@ -58,7 +62,11 @@ Credentials handleAccessTokenResponse(http.Response response, Uri tokenEndpoint,
 }
 
 
-Credentials handleAccessTokenResponseParameters(var Parameters) {
+Credentials handleAccessTokenResponseParameters(var parameters,
+    Uri tokenEndpoint,
+    DateTime startTime,
+    List<String>? scopes,
+    String delimiter) {
   for (var requiredParameter in ['access_token', 'token_type']) {
     if (!parameters.containsKey(requiredParameter)) {
       throw FormatException(
@@ -135,7 +143,7 @@ void _handleErrorResponse(
 
   var contentTypeString = response.headers['content-type'];
   var contentType =
-      contentTypeString == null ? null : MediaType.parse(contentTypeString);
+  contentTypeString == null ? null : MediaType.parse(contentTypeString);
 
   var parameters = getParameters(contentType, response.body);
 
